@@ -75,6 +75,26 @@ static partition_info_msg_t *part_info_msg = NULL;
  * Global Print Functions
  *****************************************************************************/
 
+void srcc_hide_job_step_info(job_step_info_t * step)
+{
+	uid_t caller_uid = getuid();
+
+	if(caller_uid == 0) // root
+		return;
+
+	if(caller_uid == step->user_id) // my job
+		return;
+
+	step->step_id = 0;
+
+	step->job_id = 0;
+	step->user_id = 0;
+	step->array_job_id = 0;
+
+	if(step->array_task_id != NO_VAL)
+		step->array_task_id = 0;
+}
+
 int print_steps(List steps, List format)
 {
 	print_step_from_format(NULL, format);
@@ -84,11 +104,64 @@ int print_steps(List steps, List format)
 		ListIterator i = list_iterator_create(steps);
 
 		while ((step = (job_step_info_t *) list_next(i)) != NULL) {
+
+			srcc_hide_job_step_info(step);
+
 			print_step_from_format(step, format);
 		}
 	}
 
 	return SLURM_SUCCESS;
+}
+
+void srcc_hide_job_info(job_info_t * job)
+{
+	uid_t caller_uid = getuid();
+
+	if(caller_uid == 0) // root
+		return;
+
+	if(caller_uid == job->user_id) // my job
+		return;
+
+	job->job_id = 0;
+	job->group_id = 0;
+	job->user_id = 0;
+	job->array_job_id = 0;
+
+	if(job->array_task_id != NO_VAL)
+		job->array_task_id = 0;
+
+	static char placeholder[] = "N/A";
+	uint32_t placeholder_size = strlen(placeholder);
+
+	xfree(job->account);
+	job->account = xmalloc(placeholder_size + 1);
+	memcpy(job->account, placeholder, placeholder_size);
+
+	xfree(job->command);
+	job->command = xmalloc(placeholder_size + 1);
+	memcpy(job->command, placeholder, placeholder_size);
+
+	xfree(job->name);
+	job->name = xmalloc(placeholder_size + 1);
+	memcpy(job->name, placeholder, placeholder_size);
+
+	xfree(job->work_dir);
+	job->work_dir = xmalloc(placeholder_size + 1);
+	memcpy(job->work_dir, placeholder, placeholder_size);
+
+	xfree(job->std_in);
+	job->std_in = xmalloc(placeholder_size + 1);
+	memcpy(job->std_in, placeholder, placeholder_size);
+
+	xfree(job->std_err);
+	job->std_err = xmalloc(placeholder_size + 1);
+	memcpy(job->std_err, placeholder, placeholder_size);
+
+	xfree(job->std_out);
+	job->std_out = xmalloc(placeholder_size + 1);
+	memcpy(job->std_out, placeholder, placeholder_size);
 }
 
 int print_jobs_array(job_info_t * jobs, int size, List format)
@@ -105,6 +178,9 @@ int print_jobs_array(job_info_t * jobs, int size, List format)
 
 	/* Filter out the jobs of interest */
 	for (i = 0; i < size; i++) {
+
+		srcc_hide_job_info(&jobs[i]);
+
 		if (_filter_job(&jobs[i]))
 			continue;
 		if (params.priority_flag) {
@@ -159,6 +235,8 @@ int print_steps_array(job_step_info_t * steps, int size, List format)
 
 		/* Filter out the jobs of interest */
 		for (i = 0; i < size; i++) {
+			srcc_hide_job_step_info(&steps[i]);
+
 			if (_filter_step(&steps[i]))
 				continue;
 			list_append(step_list, (void *) &steps[i]);
@@ -370,6 +448,7 @@ int _print_time(time_t t, int level, int width, bool right)
 /*****************************************************************************
  * Job Print Functions
  *****************************************************************************/
+
 static int _print_one_job_from_format(job_info_t * job, List list)
 {
 	ListIterator iter = list_iterator_create(list);
